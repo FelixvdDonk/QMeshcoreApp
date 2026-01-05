@@ -1,5 +1,11 @@
 # QMeshCoreApp
 
+> ⚠️ **WARNING: WORK IN PROGRESS** ⚠️
+>
+> This project is in early development and is **NOT stable**. Expect bugs, breaking changes, incomplete features, and missing documentation. Use at your own risk!
+>
+> The API and protocol implementation may change without notice. Do not use in production environments.
+
 A Qt6/QML desktop companion application for [MeshCore](https://github.com/ripplebiz/MeshCore) devices. Connect to your MeshCore radio via Bluetooth Low Energy (BLE) or USB Serial to manage contacts, send messages, view the mesh network on a map, and monitor radio traffic.
 
 ![Qt](https://img.shields.io/badge/Qt-6.10+-41CD52?logo=qt&logoColor=white)
