@@ -25,7 +25,8 @@ A Qt6/QML desktop companion application for [MeshCore](https://github.com/ripple
 
 ## Screenshots
 
-*Coming soon*
+![Map View](screenshots/map-view.png)
+*Map view showing mesh nodes in the Netherlands with contact locations, repeaters, and rooms*
 
 ## Requirements
 
