@@ -2,8 +2,14 @@
 #define NUSBLECONNECTION_H
 
 #include "MeshCoreConnection.h"
+#ifdef Q_OS_LINUX
 #include "BluezAgent.h"
+#endif
+#ifdef Q_OS_WIN
+#include "WinRtBlePairing.h"
+#endif
 #include <QBluetoothDeviceInfo>
+#include <QBluetoothLocalDevice>
 #include <QLowEnergyController>
 #include <QLowEnergyService>
 #include <QLowEnergyCharacteristic>
@@ -83,15 +89,21 @@ private Q_SLOTS:
     void onServiceErrorOccurred(QLowEnergyService::ServiceError error);
     void onCharacteristicChanged(const QLowEnergyCharacteristic &characteristic, const QByteArray &value);
     void onCharacteristicWritten(const QLowEnergyCharacteristic &characteristic, const QByteArray &value);
+    void onCharacteristicRead(const QLowEnergyCharacteristic &characteristic, const QByteArray &value);
     void onDescriptorWritten(const QLowEnergyDescriptor &descriptor, const QByteArray &value);
     void onMtuChanged(int mtu);
+    void onPairingFinished(const QBluetoothAddress &address, QBluetoothLocalDevice::Pairing pairing);
+    void onPairingError(QBluetoothLocalDevice::Error error);
 
 private:
     void setupService();
     void setupServiceFromCache();  // Use characteristics without full discovery
     void enableNotifications();
+    void requestPairing();  // Request pairing with the device
     void processWriteQueue();
     void writeChunk(const QByteArray &data);
+    void startPolling();  // Fallback for Windows when notifications fail
+    void pollCharacteristic();  // Poll TX characteristic for data
 
     // Controller and service
     std::unique_ptr<QLowEnergyController> m_controller;
@@ -117,8 +129,31 @@ private:
     static constexpr int MaxRetries = 3;
     QTimer *m_retryTimer = nullptr;
     
+    // Notification subscription retry (Windows)
+    int m_notificationRetryCount = 0;
+    static constexpr int MaxNotificationRetries = 3;
+    
+    // Polling fallback for Windows
+    QTimer *m_pollTimer = nullptr;
+    bool m_pollingEnabled = false;
+    
+    // Local device for pairing operations
+    QBluetoothLocalDevice *m_localDevice = nullptr;
+    QBluetoothAddress m_remoteAddress;
+    bool m_pairingRequested = false;
+    
+#ifdef Q_OS_LINUX
     // BlueZ agent for PIN pairing (Linux only)
     BluezAgent *m_agent = nullptr;
+#endif
+
+#ifdef Q_OS_WIN
+    // WinRT pairing helper (Windows only)
+    WinRtBlePairing *m_winrtPairing = nullptr;
+#endif
+
+    // PIN code for pairing
+    quint32 m_pin = 123456;
 };
 
 } // namespace MeshCore

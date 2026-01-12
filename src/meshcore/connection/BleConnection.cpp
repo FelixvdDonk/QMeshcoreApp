@@ -1,5 +1,7 @@
 #include "BleConnection.h"
+#ifdef Q_OS_LINUX
 #include "BluezAgent.h"
+#endif
 #include "../MeshCoreConstants.h"
 #include <QDebug>
 #include <QTimer>

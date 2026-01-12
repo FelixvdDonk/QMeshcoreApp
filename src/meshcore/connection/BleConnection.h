@@ -2,7 +2,9 @@
 #define BLECONNECTION_H
 
 #include "MeshCoreConnection.h"
+#ifdef Q_OS_LINUX
 #include "BluezAgent.h"
+#endif
 #include <QBluetoothDeviceInfo>
 #include <QLowEnergyController>
 #include <QLowEnergyService>
@@ -84,8 +86,10 @@ private:
     bool m_notificationsEnabled = false;
     bool m_skipNotifications = false;  // Set true to avoid CCCD writes that cause disconnection
     
+#ifdef Q_OS_LINUX
     // BlueZ agent for PIN pairing (Linux only)
     BluezAgent *m_agent = nullptr;
+#endif
 };
 
 } // namespace MeshCore

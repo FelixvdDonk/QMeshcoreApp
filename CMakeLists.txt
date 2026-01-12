@@ -96,12 +96,16 @@ qt_add_qml_module(QMeshCoreApp
         src/meshcore/connection/BleConnection.h
         src/meshcore/connection/NusBleConnection.cpp
         src/meshcore/connection/NusBleConnection.h
-        src/meshcore/connection/DBusBleConnection.cpp
-        src/meshcore/connection/DBusBleConnection.h
-        src/meshcore/connection/BluezAgent.cpp
-        src/meshcore/connection/BluezAgent.h
         src/meshcore/connection/SerialConnection.cpp
         src/meshcore/connection/SerialConnection.h
+        # Linux-only D-Bus based connections
+        $<$<PLATFORM_ID:Linux>:src/meshcore/connection/DBusBleConnection.cpp>
+        $<$<PLATFORM_ID:Linux>:src/meshcore/connection/DBusBleConnection.h>
+        $<$<PLATFORM_ID:Linux>:src/meshcore/connection/BluezAgent.cpp>
+        $<$<PLATFORM_ID:Linux>:src/meshcore/connection/BluezAgent.h>
+        # Windows-only WinRT BLE pairing
+        $<$<PLATFORM_ID:Windows>:src/meshcore/connection/WinRtBlePairing.cpp>
+        $<$<PLATFORM_ID:Windows>:src/meshcore/connection/WinRtBlePairing.h>
 
         # Utils
         src/meshcore/utils/BufferReader.cpp
@@ -126,6 +130,14 @@ target_link_libraries(QMeshCoreApp PRIVATE
     Qt6::Positioning
     Qt6::Location
 )
+
+# Windows-specific: Link WinRT libraries for BLE pairing
+if(WIN32)
+    target_link_libraries(QMeshCoreApp PRIVATE
+        windowsapp
+    )
+    target_compile_options(QMeshCoreApp PRIVATE /await)
+endif()
 
 # Install rules
 install(TARGETS QMeshCoreApp

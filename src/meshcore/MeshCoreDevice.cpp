@@ -1,7 +1,9 @@
 #include "MeshCoreDevice.h"
 #include "connection/BleConnection.h"
 #include "connection/NusBleConnection.h"
+#ifdef Q_OS_LINUX
 #include "connection/DBusBleConnection.h"
+#endif
 #include "connection/SerialConnection.h"
 #include <QDateTime>
 #include <QDebug>
