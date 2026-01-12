@@ -50,6 +50,8 @@ qt_add_qml_module(QMeshCoreApp
         # Core
         src/meshcore/MeshCoreDevice.cpp
         src/meshcore/MeshCoreDevice.h
+        src/meshcore/MeshCoreDeviceController.cpp
+        src/meshcore/MeshCoreDeviceController.h
         src/meshcore/MeshCoreConstants.cpp
         src/meshcore/MeshCoreConstants.h
 

@@ -336,6 +336,7 @@ void MeshCoreDevice::onContactsStarted(quint32 count)
     Q_UNUSED(count)
     if (!m_contactsSyncing) {
         m_contactModel.clear();
+        Q_EMIT contactsCleared();
     }
     m_contactsSyncing = true;
 }
@@ -357,6 +358,7 @@ void MeshCoreDevice::onChannelInfoReceived(const ChannelInfo &channelInfo)
     // Only add non-empty channels to the model
     if (!channelInfo.isEmpty()) {
         m_channelModel.updateChannel(channelInfo);
+        Q_EMIT channelInfoReceived(channelInfo);
     }
 
     // If we're querying all channels, continue up to max 8 channels
@@ -441,8 +443,7 @@ void MeshCoreDevice::onMsgWaitingPush()
 
 void MeshCoreDevice::onStatusResponsePush(const QByteArray &pubKeyPrefix, const RepeaterStats &stats)
 {
-    Q_UNUSED(pubKeyPrefix)
-    Q_EMIT repeaterStatusReceived(stats);
+    Q_EMIT repeaterStatusReceived(pubKeyPrefix, stats);
 }
 
 void MeshCoreDevice::onTelemetryResponsePush(const TelemetryData &telemetry)
@@ -509,6 +510,7 @@ void MeshCoreDevice::requestAllChannels()
         m_queryingChannels = true;
         m_channelQueryIndex = 0;
         m_channelModel.clear();
+        Q_EMIT channelsCleared();
         m_connection->sendCommandGetChannel(0);
     }
 }
@@ -700,6 +702,7 @@ void MeshCoreDevice::onLogRxDataPush(double snr, qint8 rssi, const QByteArray &r
 {
     // Add to the RX log model (which will check if logging is enabled)
     m_rxLogModel.addEntry(snr, rssi, rawData);
+    Q_EMIT rxLogEntry(snr, rssi, rawData);
 }
 
 } // namespace MeshCore

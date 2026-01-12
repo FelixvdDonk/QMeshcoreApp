@@ -1,115 +1,59 @@
-#ifndef MESHCOREDEVICE_H
-#define MESHCOREDEVICE_H
+#ifndef MESHCOREDEVICECONTROLLER_H
+#define MESHCOREDEVICECONTROLLER_H
 
 #include <QObject>
-#include <QBluetoothDeviceDiscoveryAgent>
-#include <QBluetoothDeviceInfo>
-#include <QSerialPortInfo>
+#include <QThread>
 #include <QtQml/qqmlregistration.h>
-#include <memory>
 
-#include "MeshCoreConstants.h"
-#include "types/SelfInfo.h"
-#include "types/DeviceInfo.h"
-#include "types/Contact.h"
-#include "types/ChannelInfo.h"
-#include "types/ContactMessage.h"
-#include "types/ChannelMessage.h"
-#include "types/RepeaterStats.h"
-#include "types/TraceData.h"
-#include "types/TelemetryData.h"
-#include "models/ContactModel.h"
-#include "models/ChannelModel.h"
-#include "models/MessageModel.h"
-#include "models/RxLogModel.h"
+#include "MeshCoreDevice.h"
 
 namespace MeshCore {
 
-class MeshCoreConnection;
-class BleConnection;
-class SerialConnection;
-
 /**
- * @brief Main interface class for communicating with a MeshCore device
+ * @brief QML-facing controller that manages MeshCoreDevice on a worker thread
  *
- * This class provides a high-level, QML-friendly API for connecting to
- * and communicating with MeshCore devices over BLE or Serial (USB).
- *
- * Example QML usage:
- * @code
- * MeshCoreDevice {
- *     id: device
- *     onConnectedChanged: console.log("Connected:", connected)
- *     onSelfInfoChanged: console.log("Device name:", selfInfo.name)
- * }
- *
- * Button {
- *     text: "Scan BLE"
- *     onClicked: device.startBleScan()
- * }
- * @endcode
+ * This class provides the same API as MeshCoreDevice but runs the actual
+ * device operations on a separate thread to keep the UI responsive.
+ * All communication happens via queued signal/slot connections.
  */
-class MeshCoreDevice : public QObject
+class MeshCoreDeviceController : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
 
 public:
-    // Enums exposed to QML
-    enum ConnectionState {
-        Disconnected = 0,
-        Connecting,
-        Connected,
-        Error
-    };
-    Q_ENUM(ConnectionState)
-
-    enum ConnectionType {
-        None = 0,
-        Ble,
-        Serial
-    };
-    Q_ENUM(ConnectionType)
-
-    // Advert types - must match MeshCoreConstants::AdvertType values
-    enum AdvertTypeEnum {
-        AdvertTypeNone = 0,      // Unknown/unset
-        AdvertTypeChat = 1,      // Chat client node
-        AdvertTypeRepeater = 2,  // Repeater node
-        AdvertTypeRoom = 3       // Room server
-    };
-    Q_ENUM(AdvertTypeEnum)
+    // Forward enums from MeshCoreDevice
+    using ConnectionState = MeshCoreDevice::ConnectionState;
+    using ConnectionType = MeshCoreDevice::ConnectionType;
+    using AdvertTypeEnum = MeshCoreDevice::AdvertTypeEnum;
 
 private:
-    // Connection state
+    // Properties - mirror MeshCoreDevice
     Q_PROPERTY(ConnectionState connectionState READ connectionState NOTIFY connectionStateChanged)
     Q_PROPERTY(ConnectionType connectionType READ connectionType NOTIFY connectionTypeChanged)
     Q_PROPERTY(bool connected READ isConnected NOTIFY connectedChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
 
-    // Device info
     Q_PROPERTY(SelfInfo selfInfo READ selfInfo NOTIFY selfInfoChanged)
     Q_PROPERTY(DeviceInfo deviceInfo READ deviceInfo NOTIFY deviceInfoChanged)
     Q_PROPERTY(quint16 batteryMilliVolts READ batteryMilliVolts NOTIFY batteryMilliVoltsChanged)
     Q_PROPERTY(double batteryVolts READ batteryVolts NOTIFY batteryMilliVoltsChanged)
 
-    // Models (for QML ListView binding)
+    // Models live on the main thread for QML binding
     Q_PROPERTY(ContactModel* contacts READ contacts CONSTANT)
     Q_PROPERTY(ChannelModel* channels READ channels CONSTANT)
     Q_PROPERTY(MessageModel* messages READ messages CONSTANT)
     Q_PROPERTY(RxLogModel* rxLog READ rxLog CONSTANT)
 
-    // BLE scanning
     Q_PROPERTY(bool scanning READ isScanning NOTIFY scanningChanged)
     Q_PROPERTY(QVariantList discoveredBleDevices READ discoveredBleDevices NOTIFY discoveredBleDevicesChanged)
-
-    // Serial ports
     Q_PROPERTY(QVariantList availableSerialPorts READ availableSerialPorts NOTIFY availableSerialPortsChanged)
 
 public:
-    explicit MeshCoreDevice(QObject *parent = nullptr);
-    ~MeshCoreDevice() override;
+    explicit MeshCoreDeviceController(QObject *parent = nullptr);
+    ~MeshCoreDeviceController() override;
 
-    // Property getters
+    // Property getters (cached values from worker)
     [[nodiscard]] ConnectionState connectionState() const { return m_connectionState; }
     [[nodiscard]] ConnectionType connectionType() const { return m_connectionType; }
     [[nodiscard]] bool isConnected() const { return m_connectionState == ConnectionState::Connected; }
@@ -119,21 +63,18 @@ public:
     [[nodiscard]] quint16 batteryMilliVolts() const { return m_batteryMilliVolts; }
     [[nodiscard]] double batteryVolts() const { return m_batteryMilliVolts / 1000.0; }
 
-    // Model getters
+    // Models (on main thread)
     [[nodiscard]] ContactModel *contacts() { return &m_contactModel; }
     [[nodiscard]] ChannelModel *channels() { return &m_channelModel; }
     [[nodiscard]] MessageModel *messages() { return &m_messageModel; }
     [[nodiscard]] RxLogModel *rxLog() { return &m_rxLogModel; }
 
-    // BLE scanning
     [[nodiscard]] bool isScanning() const { return m_scanning; }
     [[nodiscard]] QVariantList discoveredBleDevices() const { return m_discoveredBleDevices; }
-
-    // Serial ports
     [[nodiscard]] QVariantList availableSerialPorts() const;
 
 public Q_SLOTS:
-    // BLE operations
+    // BLE operations - forwarded to worker
     void startBleScan();
     void stopBleScan();
     void connectBle(int deviceIndex);
@@ -147,7 +88,7 @@ public Q_SLOTS:
     // General connection
     void disconnect();
 
-    // Device commands (high-level)
+    // Device commands
     void requestSelfInfo();
     void requestContacts();
     void requestDeviceTime();
@@ -159,7 +100,7 @@ public Q_SLOTS:
     // Messaging
     void sendTextMessage(const QByteArray &contactPublicKey, const QString &text);
     void sendTextMessageToName(const QString &contactName, const QString &text);
-    void sendContactMessage(const QByteArray &contactPublicKey, const QString &text);  // Alias for sendTextMessage
+    void sendContactMessage(const QByteArray &contactPublicKey, const QString &text);
     void sendChannelMessage(int channelIndex, const QString &text);
     void syncNextMessage();
     void syncAllMessages();
@@ -190,12 +131,10 @@ public Q_SLOTS:
     void requestTelemetry(const QByteArray &publicKey);
     void sendTracePath(const QByteArray &path);
     void reboot();
-
-    // Low-level access
     void setManualAddContacts(bool manual);
 
 Q_SIGNALS:
-    // Property signals
+    // Property change signals
     void connectionStateChanged();
     void connectionTypeChanged();
     void connectedChanged();
@@ -209,97 +148,103 @@ Q_SIGNALS:
 
     // Event signals
     void connectionError(const QString &error);
-    void contactReceived(const Contact &contact);
+    void messageSent(quint32 expectedAckCrc, quint32 estTimeout);
     void contactMessageReceived(const ContactMessage &message);
     void channelMessageReceived(const ChannelMessage &message);
-    void channelInfoReceived(const ChannelInfo &channelInfo);
-    void messageSent(quint32 expectedAckCrc, quint32 estTimeoutMs);
-    void sendConfirmed(quint32 ackCode, quint32 roundTripMs);
+    void noMoreMessages();
     void newAdvertReceived(const Contact &contact);
     void pathUpdated(const QByteArray &publicKey);
+    void sendConfirmed(quint32 ackCode, quint32 roundTrip);
+    void msgWaiting();
     void repeaterStatusReceived(const QByteArray &publicKey, const RepeaterStats &stats);
     void telemetryReceived(const TelemetryData &telemetry);
     void traceDataReceived(const TraceData &traceData);
     void exportedContact(const QByteArray &advertPacketBytes);
-    void msgWaiting();
-    void noMoreMessages();
 
-    // Model sync signals (for controller)
-    void contactsCleared();
-    void channelsCleared();
-    void rxLogEntry(double snr, qint8 rssi, const QByteArray &rawData);
+    // Internal signals to worker thread
+    void doStartBleScan();
+    void doStopBleScan();
+    void doConnectBle(int deviceIndex);
+    void doConnectBleByAddress(const QString &address);
+    void doRefreshSerialPorts();
+    void doConnectSerial(const QString &portName, int baudRate);
+    void doConnectSerialByIndex(int portIndex, int baudRate);
+    void doDisconnect();
+    void doRequestSelfInfo();
+    void doRequestContacts();
+    void doRequestDeviceTime();
+    void doSyncDeviceTime();
+    void doRequestBatteryVoltage();
+    void doRequestChannel(int channelIndex);
+    void doRequestAllChannels();
+    void doSendTextMessage(const QByteArray &contactPublicKey, const QString &text);
+    void doSendTextMessageToName(const QString &contactName, const QString &text);
+    void doSendChannelMessage(int channelIndex, const QString &text);
+    void doSyncNextMessage();
+    void doSyncAllMessages();
+    void doSendFloodAdvert();
+    void doSendZeroHopAdvert();
+    void doSetAdvertName(const QString &name);
+    void doSetAdvertLocation(double latitude, double longitude);
+    void doSetTxPower(int power);
+    void doSetRadioParams(quint32 freqHz, quint32 bwHz, int sf, int cr);
+    void doRemoveContact(const QByteArray &publicKey);
+    void doResetContactPath(const QByteArray &publicKey);
+    void doShareContact(const QByteArray &publicKey);
+    void doExportContact(const QByteArray &publicKey);
+    void doImportContact(const QByteArray &advertPacketBytes);
+    void doSetChannel(int channelIndex, const QString &name, const QByteArray &secret);
+    void doDeleteChannel(int channelIndex);
+    void doRequestRepeaterStatus(const QByteArray &publicKey);
+    void doRequestTelemetry(const QByteArray &publicKey);
+    void doSendTracePath(const QByteArray &path);
+    void doReboot();
+    void doSetManualAddContacts(bool manual);
 
 private Q_SLOTS:
-    // BLE discovery
-    void onBleDeviceDiscovered(const QBluetoothDeviceInfo &deviceInfo);
-    void onBleScanFinished();
-    void onBleScanError(QBluetoothDeviceDiscoveryAgent::Error error);
+    // Slots to receive updates from worker
+    void onConnectionStateChanged();
+    void onConnectionTypeChanged();
+    void onErrorStringChanged();
+    void onSelfInfoChanged();
+    void onDeviceInfoChanged();
+    void onBatteryMilliVoltsChanged();
+    void onScanningChanged();
+    void onDiscoveredBleDevicesChanged();
+    void onAvailableSerialPortsChanged();
 
-    // Connection events
-    void onConnectionConnected();
-    void onConnectionDisconnected();
-    void onConnectionError(const QString &error);
-
-    // Response handlers
-    void onSelfInfoReceived(const SelfInfo &selfInfo);
-    void onDeviceInfoReceived(const DeviceInfo &deviceInfo);
-    void onContactsStarted(quint32 count);
+    // Forward model updates from worker
     void onContactReceived(const Contact &contact);
-    void onContactsEnded(quint32 mostRecentLastMod);
-    void onChannelInfoReceived(const ChannelInfo &channelInfo);
-    void onBatteryVoltageReceived(quint16 milliVolts);
-    void onSentResponse(qint8 result, quint32 expectedAckCrc, quint32 estTimeout);
-    void onContactMsgReceived(const ContactMessage &message);
-    void onChannelMsgReceived(const ChannelMessage &message);
-    void onNoMoreMessages();
-    void onExportContactReceived(const QByteArray &advertPacketBytes);
-
-    // Push notifications
-    void onNewAdvertPush(const Contact &contact);
-    void onPathUpdatedPush(const QByteArray &publicKey);
-    void onSendConfirmedPush(quint32 ackCode, quint32 roundTrip);
-    void onMsgWaitingPush();
-    void onStatusResponsePush(const QByteArray &pubKeyPrefix, const RepeaterStats &stats);
-    void onTelemetryResponsePush(const TelemetryData &telemetry);
-    void onTraceDataPush(const TraceData &traceData);
-    void onLogRxDataPush(double snr, qint8 rssi, const QByteArray &rawData);
+    void onContactsCleared();
+    void onChannelReceived(const ChannelInfo &channel);
+    void onChannelsCleared();
+    void onContactMessageReceived(const ContactMessage &message);
+    void onChannelMessageReceived(const ChannelMessage &message);
+    void onRxLogEntry(double snr, qint8 rssi, const QByteArray &rawData);
 
 private:
-    void setConnectionState(ConnectionState state);
-    void setErrorString(const QString &error);
-    void setupConnectionSignals();
-    void cleanupConnection();
+    void setupConnections();
 
-    // Connection
-    std::unique_ptr<MeshCoreConnection> m_connection;
+    QThread m_workerThread;
+    MeshCoreDevice *m_device = nullptr;  // Lives on worker thread
+
+    // Cached state (main thread copies)
     ConnectionState m_connectionState = ConnectionState::Disconnected;
     ConnectionType m_connectionType = ConnectionType::None;
     QString m_errorString;
-
-    // Device state
     SelfInfo m_selfInfo;
     DeviceInfo m_deviceInfo;
     quint16 m_batteryMilliVolts = 0;
+    bool m_scanning = false;
+    QVariantList m_discoveredBleDevices;
 
-    // Models
+    // Models on main thread
     ContactModel m_contactModel;
     ChannelModel m_channelModel;
     MessageModel m_messageModel;
     RxLogModel m_rxLogModel;
-
-    // BLE scanning
-    std::unique_ptr<QBluetoothDeviceDiscoveryAgent> m_bleDiscoveryAgent;
-    bool m_scanning = false;
-    QVariantList m_discoveredBleDevices;
-    QList<QBluetoothDeviceInfo> m_discoveredBleDeviceInfos;
-
-    // Internal state
-    bool m_contactsSyncing = false;
-    int m_channelQueryIndex = 0;
-    bool m_queryingChannels = false;
-    bool m_syncingMessages = false;
 };
 
 } // namespace MeshCore
 
-#endif // MESHCOREDEVICE_H
+#endif // MESHCOREDEVICECONTROLLER_H
